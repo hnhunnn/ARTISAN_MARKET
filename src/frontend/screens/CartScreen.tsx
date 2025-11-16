@@ -1,0 +1,331 @@
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  ScrollView,
+  Dimensions,
+} from 'react-native';
+
+const {  } = Dimensions.get('window');
+
+// Dữ liệu giả lập cho giỏ hàng
+const initialCartItems = [
+  { id: 1, name: 'bình gốm', detail: 'gốm', price: 1000, quantity: 1, icon: '🌿' },
+  { id: 2, name: 'Tượng Phật', detail: 'sứ', price: 500000, quantity: 2, icon: '🙏' },
+  { id: 3, name: 'Khay tre', detail: 'tre', price: 150000, quantity: 1, icon: '🧺' },
+];
+
+// Component Card Sản phẩm trong Giỏ hàng
+const CartItemCard: React.FC<any> = ({ item }) => {
+  // Thay thế bằng logic quản lý state giỏ hàng thực tế
+  const handleQuantityChange = (delta: number) => {
+    console.log(`Thay đổi số lượng cho ${item.name}: ${item.quantity + delta}`);
+  };
+
+  const handleRemoveItem = () => {
+    console.log(`Xóa sản phẩm ${item.name}`);
+  };
+
+  const formattedPrice = item.price.toLocaleString('vi-VN');
+
+  return (
+    <View style={styles.itemCard}>
+      <Text style={styles.itemIcon}>{item.icon}</Text>
+      
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemName}>{item.name}</Text>
+        <Text style={styles.itemDetail}>{item.detail}</Text>
+        <Text style={styles.itemPrice}>{formattedPrice} đ</Text>
+      </View>
+
+      <View style={styles.itemActions}>
+        {/* Nút Giảm số lượng */}
+        <TouchableOpacity 
+          style={styles.quantityButton} 
+          onPress={() => handleQuantityChange(-1)}
+          disabled={item.quantity <= 1}
+        >
+          <Text style={styles.quantityText}>-</Text>
+        </TouchableOpacity>
+        
+        {/* Số lượng */}
+        <Text style={styles.quantityDisplay}>{item.quantity}</Text>
+
+        {/* Nút Tăng số lượng */}
+        <TouchableOpacity 
+          style={styles.quantityButton} 
+          onPress={() => handleQuantityChange(1)}
+        >
+          <Text style={styles.quantityText}>+</Text>
+        </TouchableOpacity>
+
+        {/* Nút Xóa */}
+        <TouchableOpacity style={styles.removeButton} onPress={handleRemoveItem}>
+          <Text style={styles.removeText}>×</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+// Component Giỏ hàng chính
+const CartScreen: React.FC = ({  }: any) => {
+  const [cartItems ] = React.useState(initialCartItems);
+  
+  const handleGoBack = () => {
+    // Điều hướng quay lại
+    console.log('Quay lại');
+  };
+
+  const handleCheckout = () => {
+    console.log('Đã nhấn MUA NGAY');
+    // Logic thanh toán
+  };
+
+  // Tính tổng tiền
+  const totalAmount = cartItems.reduce(
+    (sum, item) => sum + item.price * item.quantity, 0
+  );
+
+  const formattedTotal = totalAmount.toLocaleString('vi-VN');
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        
+        {/* Header Màu Cam Đậm */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
+            <Text style={styles.backIcon}>{'<'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Giỏ Hàng</Text>
+        </View>
+
+        {/* Nội dung Giỏ hàng */}
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {cartItems.map((item) => (
+            <CartItemCard key={item.id} item={item} />
+          ))}
+
+          {/* Tổng kết tạm thời */}
+          <View style={styles.summaryBox}>
+            <Text style={styles.summaryText}>Tổng tiền tạm tính:</Text>
+            <Text style={styles.totalPriceText}>{formattedTotal} đ</Text>
+          </View>
+          
+          <View style={{ height: 120 }} /> {/* Tạo khoảng trống cuối trang */}
+        </ScrollView>
+
+        {/* NÚT MUA NGAY (CỐ ĐỊNH) */}
+        <TouchableOpacity 
+          style={styles.fixedCheckoutButton} 
+          onPress={handleCheckout}
+        >
+          <Text style={styles.checkoutButtonText}>MUA NGAY</Text>
+        </TouchableOpacity>
+        
+        {/* Bottom Tab Bar */}
+        <View style={styles.bottomTabBar}>
+          <TouchableOpacity style={styles.tabItem}>
+            <Text style={styles.tabIcon}>🏠</Text>
+            <Text style={styles.tabText}>Trang chủ</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tabItem}>
+            <Text style={styles.tabIcon}>🛒</Text>
+            <Text style={styles.tabTextActive}>Giỏ hàng</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FF6F00',
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#F7F7F7',
+  },
+  header: {
+    backgroundColor: '#DB4437',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    paddingTop: 50,
+  },
+  backButton: {
+    paddingRight: 15,
+  },
+  backIcon: {
+    fontSize: 24,
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 20,
+  },
+  itemCard: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  itemIcon: {
+    fontSize: 40,
+    marginRight: 15,
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  itemDetail: {
+    fontSize: 14,
+    color: '#777',
+  },
+  itemPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#DB4437', // Màu giá
+    marginTop: 5,
+  },
+  itemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quantityButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 5,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  quantityText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF6F00',
+  },
+  quantityDisplay: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  removeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 5,
+    backgroundColor: '#FFEBEE', // Màu nền nhẹ cho nút xóa
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  removeText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#DB4437',
+  },
+  summaryBox: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 15,
+    marginTop: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  summaryText: {
+    fontSize: 18,
+    color: '#333',
+  },
+  totalPriceText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#DB4437',
+  },
+  // NÚT MUA NGAY (Cố định)
+  fixedCheckoutButton: {
+    backgroundColor: '#FF6F00', // Màu cam
+    width: '90%', 
+    height: 55,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute', // Cố định vị trí
+    bottom: 70, // Đặt ngay trên Bottom Tab Bar (60px height + 10px margin)
+    alignSelf: 'center', 
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 6,
+    zIndex: 10, 
+  },
+  checkoutButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  // Bottom Tab Bar Styles
+  bottomTabBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    height: 60,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
+  },
+  tabItem: {
+    alignItems: 'center',
+    padding: 5,
+  },
+  tabIcon: {
+    fontSize: 24,
+  },
+  tabText: {
+    fontSize: 12,
+    color: '#777',
+  },
+  tabTextActive: {
+    fontSize: 12,
+    color: '#FF6F00',
+    fontWeight: 'bold',
+  },
+});
+
+export default CartScreen;

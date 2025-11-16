@@ -1,4 +1,5 @@
-import React from 'react';
+// THÊM: import 'useState' để quản lý text input
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,16 +7,64 @@ import {
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  Image, // Đã sử dụng component Image
+  Image,
+  Alert, // THÊM: 'Alert' để thông báo lỗi
 } from 'react-native';
+// THÊM: import 'auth' từ Firebase
+import auth from '@react-native-firebase/auth';
 
-const LoginScreen: React.FC = () => {
+// THÊM: Khai báo props, chúng ta cần 'navigation' để chuyển trang
+const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  // THÊM: State để lưu email và mật khẩu
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  // THÊM: Hàm xử lý logic đăng nhập
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ email và mật khẩu.');
+      return;
+    }
+
+    try {
+      // Dùng hàm của Firebase để đăng nhập
+      await auth().signInWithEmailAndPassword(email, password);
+      // Bạn không cần làm gì thêm, file App.tsx (từ hướng dẫn trước)
+      // sẽ tự động phát hiện đăng nhập thành công và chuyển màn hình Home.
+    } catch (error: any) {
+      // <-- Sửa ở đây: Thêm ': any'
+      // Xử lý các lỗi thường gặp
+      let errorMessage = 'Đã có lỗi xảy ra. Vui lòng thử lại.';
+      if (
+        error.code === 'auth/user-not-found' ||
+        error.code === 'auth/wrong-password'
+      ) {
+        // <-- Sẽ hết lỗi
+        errorMessage = 'Email hoặc mật khẩu không đúng!';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Địa chỉ email không hợp lệ!';
+      }
+      Alert.alert('Đăng nhập thất bại', errorMessage);
+      console.error(error);
+    }
+  };
+
+  // THÊM: Hàm xử lý đăng nhập với tư cách khách
+  const handleGuestLogin = async () => {
+    try {
+      await auth().signInAnonymously();
+      // App.tsx cũng sẽ tự động phát hiện và chuyển màn hình Home
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Lỗi', 'Không thể đăng nhập với tư cách khách.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Phần Header Màu Cam */}
+        {/* Phần Header Màu Cam (Không đổi) */}
         <View style={styles.header}>
-          {/* Đã cập nhật để dùng Image component */}
           <Image
             source={require('../../assets/logo_1.png')}
             style={styles.logo}
@@ -35,6 +84,9 @@ const LoginScreen: React.FC = () => {
             placeholder="your@email.com"
             keyboardType="email-address"
             autoCapitalize="none"
+            // THÊM: value và onChangeText
+            value={email}
+            onChangeText={setEmail}
           />
 
           {/* Input Mật Khẩu */}
@@ -43,18 +95,25 @@ const LoginScreen: React.FC = () => {
             style={styles.input}
             placeholder="********"
             secureTextEntry
+            // THÊM: value và onChangeText
+            value={password}
+            onChangeText={setPassword}
           />
 
           {/* Nút Đăng Nhập */}
           <TouchableOpacity
             style={styles.loginButton}
-            onPress={() => console.log('Đăng nhập')}
+            // THAY ĐỔI: Gọi hàm handleLogin
+            onPress={handleLogin}
           >
             <Text style={styles.loginButtonText}>Đăng Nhập</Text>
           </TouchableOpacity>
 
           {/* Link Đăng Ký */}
-          <TouchableOpacity onPress={() => console.log('Đăng ký')}>
+          <TouchableOpacity
+            // THAY ĐỔI: Điều hướng sang màn hình Đăng ký
+            onPress={() => navigation.navigate('Register')}
+          >
             <Text style={styles.registerText}>
               <Text style={styles.boldText}>Chưa có tài khoản?</Text> Đăng ký
               ngay
@@ -65,7 +124,8 @@ const LoginScreen: React.FC = () => {
         {/* Tiếp tục với tư cách khách */}
         <TouchableOpacity
           style={styles.guestButton}
-          onPress={() => console.log('Tiếp tục với tư cách khách')}
+          // THAY ĐỔI: Gọi hàm đăng nhập ẩn danh
+          onPress={handleGuestLogin}
         >
           <Text style={styles.guestButtonText}>Tiếp tục với tư cách khách</Text>
         </TouchableOpacity>
@@ -74,6 +134,7 @@ const LoginScreen: React.FC = () => {
   );
 };
 
+// Toàn bộ StyleSheet được giữ nguyên (Không thay đổi)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -90,17 +151,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 50,
   },
-  // Đã thêm style cho logo thật
   logo: {
     width: 90, // Kích thước logo
     height: 90,
     resizeMode: 'contain',
     marginBottom: 10,
-    // Thêm borderRadius: 45 nếu bạn muốn logo hình tròn
   },
-
-  // *** Đã xóa logoPlaceholder và logoText cũ ***
-
   appName: {
     fontSize: 32,
     fontWeight: 'bold',
