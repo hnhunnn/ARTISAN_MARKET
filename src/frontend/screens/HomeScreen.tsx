@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,25 @@ import {
   ScrollView,
   Dimensions,
   Image,
-  ActivityIndicator,
+  FlatList,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+
 import auth from '@react-native-firebase/auth';
-import firestore, {
-  FirebaseFirestoreTypes,
-} from '@react-native-firebase/firestore';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext'; // <--- [MỚI] Import Wishlist
+
+// Import các hàm từ service
+import {
+  Product,
+  fetchProductsFromFirestore,
+  getUserInfo,
+  seedDatabase,
+  updateAllProductsQuantity,
+} from '../../backend/productService';
+
 const { width } = Dimensions.get('window');
 
 const categories = [
@@ -44,134 +56,200 @@ const CategoryCard: React.FC<{
   </TouchableOpacity>
 );
 
-const ProductCard: React.FC<{ product: any }> = ({ product }) => (
-  <View style={styles.productCard}>
-    <Image
-      source={{
-        uri:
-          product.imageUrl ||
-          'https://placehold.co/600x400/FF6F00/white?text=Artisan',
-      }}
-      style={styles.productImage}
-    />
-    <Text style={styles.productName}>{product.name || 'Tên sản phẩm'}</Text>
-    <Text style={styles.productPrice}>
-      {(product.price || 0).toLocaleString('vi-VN')} VNĐ
-    </Text>
-  </View>
-);
+// --- [CẬP NHẬT] ProductCard: Thêm nút Tim ---
+const ProductCard: React.FC<{
+  product: Product;
+  onAddToCart: (item: Product) => void;
+}> = ({ product, onAddToCart }) => {
+  const navigation = useNavigation();
+
+  // 1. Sử dụng Hook Wishlist để kiểm tra trạng thái và xử lý bấm tim
+  const { isInWishlist, toggleWishlist } = useWishlist();
+  const isLiked = isInWishlist(product.id);
+
+  return (
+    <TouchableOpacity
+      style={styles.productCard}
+      onPress={() => (navigation as any).navigate('ProductDetail', { product })}
+    >
+      {/* Wrapper chứa ảnh và nút tim */}
+      <View>
+        <Image source={{ uri: product.imageUrl }} style={styles.productImage} />
+
+        {/* 2. Nút Trái Tim nằm trên góc ảnh */}
+        <TouchableOpacity
+          style={styles.heartButton}
+          onPress={() => toggleWishlist(product)} // Lưu vào Firebase qua Context
+        >
+          <Text style={{ fontSize: 16, color: isLiked ? 'red' : 'black' }}>
+            {isLiked ? '❤️' : '🤍'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.productInfo}>
+        <Text style={styles.productName} numberOfLines={2}>
+          {product.name}
+        </Text>
+        <Text style={styles.productPrice}>
+          {product.price.toLocaleString('vi-VN')} đ
+        </Text>
+
+        <View style={styles.ratingRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ color: '#FFD700', marginRight: 4 }}>⭐</Text>
+            <Text style={styles.productRatingText}>
+              {product.rating.toFixed(1)}
+            </Text>
+          </View>
+
+          {/* Hiển thị số lượng tồn kho */}
+          <Text style={{ fontSize: 10, color: '#999', marginLeft: 10 }}>
+            Kho: {product.quantity ?? 0}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => onAddToCart(product)}
+        >
+          <Text style={styles.addButtonText}>+ Thêm vào giỏ</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 const HomeScreen: React.FC = () => {
-  const [activeCategory, setActiveCategory] = useState('all');
-
   const [userName, setUserName] = useState('Khách');
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogout = () => {
-    Alert.alert('Đăng xuất', 'Bạn có chắc chắn muốn đăng xuất?', [
+  const { addToCart } = useCart();
+  const navigation = useNavigation();
+
+  // Lấy thông tin User thật
+  const fetchUser = async () => {
+    const currentUser = auth().currentUser;
+    if (currentUser) {
+      const info: any = await getUserInfo(currentUser.uid);
+      if (info && info.hoTen) {
+        setUserName(info.hoTen);
+      } else {
+        setUserName(currentUser.email || 'Người dùng');
+      }
+    }
+  };
+
+  // Lấy sản phẩm từ Firebase
+  const loadProducts = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const fetchedProducts = await fetchProductsFromFirestore(activeCategory);
+      setProducts(fetchedProducts);
+    } catch (e) {
+      console.error('Lỗi tải sản phẩm:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeCategory]);
+
+  // Load lại khi màn hình được focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchUser();
+      loadProducts();
+    }, [loadProducts]),
+  );
+
+  const handleLogout = async () => {
+    try {
+      await auth().signOut();
+    } catch (error) {
+      Alert.alert('Lỗi', 'Không thể đăng xuất.');
+    }
+  };
+
+  // Hàm nạp dữ liệu mẫu & Cập nhật kho
+  const handleDataAction = () => {
+    Alert.alert('Quản lý dữ liệu', 'Chọn hành động bạn muốn:', [
+      { text: 'Hủy', style: 'cancel' },
       {
-        text: 'Hủy',
-        style: 'cancel',
+        text: 'Reset Data Mẫu',
+        onPress: async () => {
+          setIsLoading(true);
+          await seedDatabase();
+          await loadProducts();
+          setIsLoading(false);
+          Alert.alert('Thành công', 'Đã tạo lại dữ liệu mẫu');
+        },
       },
       {
-        text: 'Đăng xuất',
-        style: 'destructive',
-        onPress: () => {
-          auth()
-            .signOut()
-            .then(() => console.log('User signed out!'));
+        text: 'Cập nhật Kho (50)',
+        onPress: async () => {
+          setIsLoading(true);
+          const success = await updateAllProductsQuantity(50);
+          if (success) {
+            await loadProducts();
+            Alert.alert('Thành công', 'Đã cập nhật kho = 50 cho tất cả sp');
+          } else {
+            Alert.alert('Lỗi', 'Cập nhật thất bại');
+          }
+          setIsLoading(false);
         },
       },
     ]);
   };
 
-  useEffect(() => {
-    const currentUser = auth().currentUser;
-
-    let userSubscriber: (() => void) | undefined;
-    if (currentUser !== null) {
-      userSubscriber = firestore()
-        .collection('users')
-        .doc(currentUser.uid)
-        .onSnapshot(
-          (documentSnapshot: FirebaseFirestoreTypes.DocumentSnapshot) => {
-            if (documentSnapshot.exists) {
-              setUserName(
-                (documentSnapshot.data() as { hoTen: string })?.hoTen ||
-                  'Khách',
-              );
-            } else {
-              setUserName(currentUser.displayName || 'Khách');
-            }
-          },
-        );
-    } else {
-      setUserName('Khách');
-    }
-
-    const productSubscriber = firestore()
-      .collection('products')
-      .onSnapshot(
-        (querySnapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
-          const productsArray: any[] = [];
-          querySnapshot.forEach(documentSnapshot => {
-            productsArray.push({
-              ...documentSnapshot.data(),
-              id: documentSnapshot.id,
-            });
-          });
-
-          setProducts(productsArray);
-          if (loading) setLoading(false);
-        },
-        error => {
-          console.error('Lỗi khi lấy sản phẩm: ', error);
-          setLoading(false);
-        },
-      );
-
-    return () => {
-      if (userSubscriber) userSubscriber();
-      if (productSubscriber) productSubscriber();
-    };
-  }, []);
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyStateContainer}>
-      <Image
-        source={require('../../assets/logo_1.png')}
-        style={styles.emptyStateImage}
-      />
-      <Text style={styles.emptyStateTitle}>Chưa có sản phẩm</Text>
-      <Text style={styles.emptyStateSubtitle}>
-        Hãy trở thành người đầu tiên thêm sản phẩm!
-      </Text>
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerContainer}>
         <View style={styles.userInfoRow}>
-          <TouchableOpacity style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarText}>👤</Text>
-          </TouchableOpacity>
-
+          <View style={styles.avatarPlaceholder}>
+            <Text style={styles.avatarText}>
+              {userName.charAt(0).toUpperCase()}
+            </Text>
+          </View>
           <View>
             <Text style={styles.greetingText}>Xin chào,</Text>
             <Text style={styles.userName}>{userName}</Text>
           </View>
 
           <View style={styles.headerIcons}>
+            {/* Nút quản lý Data */}
+            <TouchableOpacity
+              onPress={handleDataAction}
+              style={{
+                marginRight: 10,
+                padding: 5,
+                backgroundColor: 'white',
+                borderRadius: 5,
+              }}
+            >
+              <Text
+                style={{ fontWeight: 'bold', color: '#FF6F00', fontSize: 10 }}
+              >
+                ⚙ DATA
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => console.log('Thông báo')}
             >
               <Text style={styles.iconText}>🔔</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => (navigation as any).navigate('Cart')}
+            >
+              <Text style={styles.iconText}>🛒</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
-              <Text style={styles.iconText}>📜</Text>
+              <Text style={styles.iconText}>🚪</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -214,26 +292,44 @@ const HomeScreen: React.FC = () => {
         </ScrollView>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Bộ Sưu Tập Đặc Biệt</Text>
+          <Text style={styles.sectionTitle}>
+            Sản Phẩm{' '}
+            {categories.find(c => c.id === activeCategory)?.name || 'Nổi Bật'}
+          </Text>
         </View>
 
-        {loading ? (
+        {isLoading ? (
           <ActivityIndicator
             size="large"
             color="#FF6F00"
-            style={{ marginTop: 50 }}
+            style={{ marginTop: 20 }}
           />
-        ) : products.length === 0 ? (
-          renderEmptyState()
+        ) : products.length > 0 ? (
+          <FlatList
+            data={products}
+            renderItem={({ item }) => (
+              <ProductCard product={item} onAddToCart={addToCart} />
+            )}
+            keyExtractor={item => item.id}
+            numColumns={2}
+            columnWrapperStyle={styles.row}
+            contentContainerStyle={styles.productListContainer}
+            scrollEnabled={false}
+          />
         ) : (
-          <View style={styles.productListContainer}>
-            {products.map(item => (
-              <ProductCard key={item.id} product={item} />
-            ))}
+          <View style={styles.emptyStateContainer}>
+            <Image
+              source={require('../../assets/logo_1.png')}
+              style={styles.emptyStateImage}
+            />
+            <Text style={styles.emptyStateTitle}>Chưa có sản phẩm nào</Text>
+            <Text style={styles.emptyStateSubtitle}>
+              Bấm nút "⚙ DATA" ở góc trên để tạo dữ liệu
+            </Text>
           </View>
         )}
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: 80 }} />
       </ScrollView>
 
       <View style={styles.bottomTabBar}>
@@ -241,9 +337,27 @@ const HomeScreen: React.FC = () => {
           <Text style={styles.tabIcon}>🏠</Text>
           <Text style={styles.tabTextActive}>Trang chủ</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabItem}>
+
+        {/* Link sang màn hình Yêu thích */}
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => (navigation as any).navigate('Wishlist')}
+        >
+          <Text style={styles.tabIcon}>❤️</Text>
+          <Text style={styles.tabText}>Yêu thích</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => (navigation as any).navigate('Cart')}
+        >
           <Text style={styles.tabIcon}>🛒</Text>
           <Text style={styles.tabText}>Giỏ hàng</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabItem}>
+          <Text style={styles.tabIcon}>👤</Text>
+          <Text style={styles.tabText}>Cá nhân</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -251,10 +365,7 @@ const HomeScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
+  safeArea: { flex: 1, backgroundColor: 'white' },
   headerContainer: {
     backgroundColor: '#FF6F00',
     padding: 20,
@@ -280,42 +391,24 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'white',
   },
-  avatarText: {
-    fontSize: 20,
-  },
-  greetingText: {
-    color: 'white',
-    fontSize: 14,
-  },
-  userName: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  avatarText: { fontSize: 20, color: 'white', fontWeight: 'bold' },
+  greetingText: { color: 'white', fontSize: 14 },
+  userName: { color: 'white', fontSize: 18, fontWeight: 'bold' },
   headerIcons: {
     flexDirection: 'row',
     position: 'absolute',
     right: 0,
+    alignItems: 'center',
   },
-  iconButton: {
-    marginLeft: 15,
-    padding: 5,
-  },
-  iconText: {
-    fontSize: 22,
-    color: 'white',
-  },
+  iconButton: { marginLeft: 10, padding: 5 },
+  iconText: { fontSize: 22, color: 'white' },
   mainTitle: {
     fontSize: 26,
     fontWeight: 'bold',
     color: 'white',
     marginTop: 10,
   },
-  subTitle: {
-    fontSize: 14,
-    color: '#FFE0B2',
-    marginBottom: 15,
-  },
+  subTitle: { fontSize: 14, color: '#FFE0B2', marginBottom: 15 },
   searchBox: {
     position: 'absolute',
     bottom: -25,
@@ -333,22 +426,10 @@ const styles = StyleSheet.create({
     elevation: 8,
     height: 50,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-  },
-  searchIcon: {
-    padding: 5,
-  },
-  searchIconText: {
-    fontSize: 18,
-    color: '#FF6F00',
-  },
-  contentScrollView: {
-    flex: 1,
-    paddingTop: 40,
-  },
+  searchInput: { flex: 1, fontSize: 16, color: '#333' },
+  searchIcon: { padding: 5 },
+  searchIconText: { fontSize: 18, color: '#FF6F00' },
+  contentScrollView: { flex: 1, paddingTop: 40 },
   categoryScrollContainer: {
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -365,55 +446,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  categoryCardActive: {
-    backgroundColor: '#FF6F00',
-    borderColor: '#FF6F00',
-  },
-  categoryIcon: {
-    fontSize: 18,
-    marginRight: 5,
-  },
-  categoryText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  categoryTextActive: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  sectionHeader: {
-    paddingHorizontal: 20,
-    marginTop: 10,
-    marginBottom: 15,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  emptyStateContainer: {
-    alignItems: 'center',
-    padding: 30,
-    marginTop: 50,
-  },
+  categoryCardActive: { backgroundColor: '#FF6F00', borderColor: '#FF6F00' },
+  categoryIcon: { fontSize: 18, marginRight: 5 },
+  categoryText: { fontSize: 16, color: '#333', fontWeight: '500' },
+  categoryTextActive: { color: 'white', fontWeight: 'bold' },
+  sectionHeader: { paddingHorizontal: 20, marginTop: 10, marginBottom: 15 },
+  sectionTitle: { fontSize: 22, fontWeight: 'bold', color: '#333' },
+  emptyStateContainer: { alignItems: 'center', padding: 30, marginTop: 50 },
   emptyStateImage: {
     width: 80,
     height: 80,
     resizeMode: 'contain',
     marginBottom: 20,
-  },
-  emptyStateIconPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  emptyStateIconText: {
-    fontSize: 40,
   },
   emptyStateTitle: {
     fontSize: 20,
@@ -427,17 +471,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 30,
   },
-  addProductButton: {
-    backgroundColor: '#FF6F00',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 10,
-  },
-  addProductButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
   bottomTabBar: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -450,60 +483,84 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: '100%',
   },
-  tabItem: {
-    alignItems: 'center',
-    padding: 5,
-  },
-  tabIcon: {
-    fontSize: 24,
-  },
-  tabText: {
-    fontSize: 12,
-    color: '#777',
-  },
-  tabTextActive: {
-    fontSize: 12,
-    color: '#FF6F00',
-    fontWeight: 'bold',
-  },
-  productListContainer: {
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
+  tabItem: { alignItems: 'center', padding: 5 },
+  tabIcon: { fontSize: 24 },
+  tabText: { fontSize: 12, color: '#777' },
+  tabTextActive: { fontSize: 12, color: '#FF6F00', fontWeight: 'bold' },
+  productListContainer: { paddingHorizontal: 10 },
+  row: { justifyContent: 'space-between', marginBottom: 10 },
+
   productCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    marginBottom: 15,
+    width: width / 2 - 30,
+    backgroundColor: 'white',
+    borderRadius: 15,
+    marginBottom: 20,
+    marginHorizontal: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
-    elevation: 3,
+    elevation: 5,
   },
   productImage: {
     width: '100%',
     height: 150,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
     resizeMode: 'cover',
-    backgroundColor: '#f0f0f0',
   },
+  // [STYLE MỚI] Nút tim trên sản phẩm
+  heartButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255,255,255,0.8)', // Nền trắng mờ
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3, // Đổ bóng nhẹ
+  },
+  productInfo: { padding: 10 },
   productName: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#333',
-    marginHorizontal: 10,
-    marginTop: 10,
+    marginBottom: 5,
+    minHeight: 40,
   },
   productPrice: {
-    fontSize: 14,
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#FF6F00',
-    marginHorizontal: 10,
-    marginBottom: 10,
-    fontWeight: '500',
+    marginBottom: 5,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  productRating: { flexDirection: 'row', alignItems: 'center' },
+  productRatingText: { fontSize: 14, color: '#777' },
+  loadingText: {
+    textAlign: 'center',
+    padding: 30,
+    fontSize: 16,
+    color: '#777',
+  },
+  addButton: {
+    backgroundColor: '#FF6F00',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  addButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });
 

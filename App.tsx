@@ -1,18 +1,23 @@
 import React, { useState, useEffect } from 'react';
-// THÊM: import 'FirebaseAuthTypes'
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-// Import các màn hình
+// Các màn hình hiện tại của bạn
 import LoginScreen from './src/frontend/screens/LoginScreen';
 import RegisterScreen from './src/frontend/screens/RegisterScreen';
 import HomeScreen from './src/frontend/screens/HomeScreen';
-// Import các màn hình khác của bạn (CartScreen, AddProductScreen...)
+import ProductDetailScreen from './src/frontend/screens/ProductDetailScreen'; // Đã import
+import WishlistScreen from './src/frontend/screens/WishlistScreen';
+import { WishlistProvider } from './src/frontend/context/WishlistContext'; // <--- MỚI
+// --- THÊM MỚI: Import Giỏ hàng ---
+import CartScreen from './src/frontend/screens/CartScreen';
+import { CartProvider } from './src/frontend/context/CartContext';
+// --------------------------------
 
 const Stack = createNativeStackNavigator();
 
-// Stack cho các màn hình khi chưa đăng nhập
+// Stack cho các màn hình khi chưa đăng nhập (GIỮ NGUYÊN)
 function AuthStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -22,49 +27,54 @@ function AuthStack() {
   );
 }
 
-// Stack cho các màn hình chính của ứng dụng (khi đã đăng nhập)
+// Stack cho các màn hình chính (ĐÃ SỬA: Thêm ProductDetail và ẩn Header mặc định)
 function AppStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {/* Màn hình Trang chủ */}
       <Stack.Screen name="Home" component={HomeScreen} />
-      {/* Thêm các màn hình khác ở đây */}
-      {/* <Stack.Screen name="AddProduct" component={AddProductScreen} /> */}
-      {/* <Stack.Screen name="Cart" component={CartScreen} /> */}
+
+      {/* Màn hình Giỏ hàng */}
+      <Stack.Screen name="Cart" component={CartScreen} />
+
+      <Stack.Screen name="Wishlist" component={WishlistScreen} />
+      {/* THÊM MỚI: Màn hình Chi tiết sản phẩm */}
+      <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
     </Stack.Navigator>
   );
 }
 
 const App = () => {
   const [initializing, setInitializing] = useState(true);
-  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null); // Dòng này đã đúng
+  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
 
-  // Hàm theo dõi trạng thái đăng nhập
-  // THAY ĐỔI: Thêm kiểu cho 'userState'
+  // Hàm theo dõi trạng thái đăng nhập (GIỮ NGUYÊN)
   function onAuthStateChanged(userState: FirebaseAuthTypes.User | null) {
-    setUser(userState); // userState sẽ là (null) nếu đăng xuất, hoặc là (object) nếu đăng nhập
+    setUser(userState);
     if (initializing) {
       setInitializing(false);
     }
   }
 
   useEffect(() => {
-    // Đăng ký listener khi component mount
     const subscriber = auth().onAuthStateChanged(onAuthStateChanged);
-
-    // Hủy đăng ký khi component unmount
     return subscriber;
   }, []);
 
-  // Hiển thị màn hình loading trong khi chờ Firebase kiểm tra
   if (initializing) {
-    return null; // Hoặc hiển thị một màn hình Loading...
+    return null;
   }
 
+  // (ĐÃ SỬA: Bọc CartProvider ra ngoài cùng NavigationContainer)
   return (
-    <NavigationContainer>
-      {/* Nếu có user (đã đăng nhập) thì hiển thị AppStack, ngược lại hiển thị AuthStack */}
-      {user ? <AppStack /> : <AuthStack />}
-    </NavigationContainer>
+    <CartProvider>
+      <WishlistProvider>
+        <NavigationContainer>
+          {/* Logic kiểm tra user giữ nguyên */}
+          {user ? <AppStack /> : <AuthStack />}
+        </NavigationContainer>
+      </WishlistProvider>
+    </CartProvider>
   );
 };
 

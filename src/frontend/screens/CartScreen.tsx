@@ -7,63 +7,71 @@ import {
   SafeAreaView,
   ScrollView,
   Dimensions,
+  Image, // Thêm Import Image
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native'; // Thêm Navigation
+import { useCart } from '../context/CartContext'; // Thêm Context
 
-const {  } = Dimensions.get('window');
-
-// Dữ liệu giả lập cho giỏ hàng
-const initialCartItems = [
-  { id: 1, name: 'bình gốm', detail: 'gốm', price: 1000, quantity: 1, icon: '🌿' },
-  { id: 2, name: 'Tượng Phật', detail: 'sứ', price: 500000, quantity: 2, icon: '🙏' },
-  { id: 3, name: 'Khay tre', detail: 'tre', price: 150000, quantity: 1, icon: '🧺' },
-];
+const { width } = Dimensions.get('window'); // Sửa lỗi cú pháp dòng này
 
 // Component Card Sản phẩm trong Giỏ hàng
 const CartItemCard: React.FC<any> = ({ item }) => {
-  // Thay thế bằng logic quản lý state giỏ hàng thực tế
+  // Lấy hàm xử lý từ Context
+  const { addToCart, removeFromCart } = useCart();
+
   const handleQuantityChange = (delta: number) => {
-    console.log(`Thay đổi số lượng cho ${item.name}: ${item.quantity + delta}`);
+    if (delta > 0) {
+      addToCart(item); // Tăng số lượng
+    } else {
+      // Hiện tại context chưa có hàm giảm 1 đơn vị, bạn có thể bổ sung sau
+      console.log('Chức năng giảm đang phát triển');
+    }
   };
 
   const handleRemoveItem = () => {
-    console.log(`Xóa sản phẩm ${item.name}`);
+    removeFromCart(item.id); // Gọi hàm xóa thật
   };
 
   const formattedPrice = item.price.toLocaleString('vi-VN');
 
   return (
     <View style={styles.itemCard}>
-      <Text style={styles.itemIcon}>{item.icon}</Text>
-      
+      {/* SỬA: Hiển thị ảnh thật thay vì icon text */}
+      <Image source={item.image} style={styles.itemImage} />
+
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemDetail}>{item.detail}</Text>
+        {/* Nếu không có detail thì hiển thị tạm category hoặc ẩn đi */}
+        <Text style={styles.itemDetail}>{item.category || 'Sản phẩm'}</Text>
         <Text style={styles.itemPrice}>{formattedPrice} đ</Text>
       </View>
 
       <View style={styles.itemActions}>
         {/* Nút Giảm số lượng */}
-        <TouchableOpacity 
-          style={styles.quantityButton} 
+        <TouchableOpacity
+          style={styles.quantityButton}
           onPress={() => handleQuantityChange(-1)}
           disabled={item.quantity <= 1}
         >
           <Text style={styles.quantityText}>-</Text>
         </TouchableOpacity>
-        
+
         {/* Số lượng */}
         <Text style={styles.quantityDisplay}>{item.quantity}</Text>
 
         {/* Nút Tăng số lượng */}
-        <TouchableOpacity 
-          style={styles.quantityButton} 
+        <TouchableOpacity
+          style={styles.quantityButton}
           onPress={() => handleQuantityChange(1)}
         >
           <Text style={styles.quantityText}>+</Text>
         </TouchableOpacity>
 
         {/* Nút Xóa */}
-        <TouchableOpacity style={styles.removeButton} onPress={handleRemoveItem}>
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={handleRemoveItem}
+        >
           <Text style={styles.removeText}>×</Text>
         </TouchableOpacity>
       </View>
@@ -72,12 +80,13 @@ const CartItemCard: React.FC<any> = ({ item }) => {
 };
 
 // Component Giỏ hàng chính
-const CartScreen: React.FC = ({  }: any) => {
-  const [cartItems ] = React.useState(initialCartItems);
-  
+const CartScreen: React.FC = () => {
+  // KẾT NỐI DATA THẬT
+  const { cartItems, getTotalPrice } = useCart();
+  const navigation = useNavigation();
+
   const handleGoBack = () => {
-    // Điều hướng quay lại
-    console.log('Quay lại');
+    navigation.goBack(); // Quay lại trang trước
   };
 
   const handleCheckout = () => {
@@ -85,17 +94,13 @@ const CartScreen: React.FC = ({  }: any) => {
     // Logic thanh toán
   };
 
-  // Tính tổng tiền
-  const totalAmount = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity, 0
-  );
-
+  // Tính tổng tiền từ hàm có sẵn hoặc tính trực tiếp
+  const totalAmount = getTotalPrice();
   const formattedTotal = totalAmount.toLocaleString('vi-VN');
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        
         {/* Header Màu Cam Đậm */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
@@ -106,30 +111,35 @@ const CartScreen: React.FC = ({  }: any) => {
 
         {/* Nội dung Giỏ hàng */}
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {cartItems.map((item) => (
-            <CartItemCard key={item.id} item={item} />
-          ))}
-
+          {cartItems.length === 0 ? (
+            <Text style={{ textAlign: 'center', marginTop: 20, color: '#777' }}>
+              Giỏ hàng đang trống
+            </Text>
+          ) : (
+            cartItems.map(item => <CartItemCard key={item.id} item={item} />)
+          )}
           {/* Tổng kết tạm thời */}
           <View style={styles.summaryBox}>
             <Text style={styles.summaryText}>Tổng tiền tạm tính:</Text>
             <Text style={styles.totalPriceText}>{formattedTotal} đ</Text>
           </View>
-          
           <View style={{ height: 120 }} /> {/* Tạo khoảng trống cuối trang */}
         </ScrollView>
 
         {/* NÚT MUA NGAY (CỐ ĐỊNH) */}
-        <TouchableOpacity 
-          style={styles.fixedCheckoutButton} 
+        <TouchableOpacity
+          style={styles.fixedCheckoutButton}
           onPress={handleCheckout}
         >
           <Text style={styles.checkoutButtonText}>MUA NGAY</Text>
         </TouchableOpacity>
-        
+
         {/* Bottom Tab Bar */}
         <View style={styles.bottomTabBar}>
-          <TouchableOpacity style={styles.tabItem}>
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => navigation.navigate('Home' as never)}
+          >
             <Text style={styles.tabIcon}>🏠</Text>
             <Text style={styles.tabText}>Trang chủ</Text>
           </TouchableOpacity>
@@ -190,9 +200,13 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
-  itemIcon: {
-    fontSize: 40,
+  // SỬA: Style cho ảnh sản phẩm
+  itemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
     marginRight: 15,
+    resizeMode: 'cover',
   },
   itemInfo: {
     flex: 1,
@@ -277,20 +291,20 @@ const styles = StyleSheet.create({
   // NÚT MUA NGAY (Cố định)
   fixedCheckoutButton: {
     backgroundColor: '#FF6F00', // Màu cam
-    width: '90%', 
+    width: '90%',
     height: 55,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute', // Cố định vị trí
     bottom: 70, // Đặt ngay trên Bottom Tab Bar (60px height + 10px margin)
-    alignSelf: 'center', 
+    alignSelf: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 6,
-    zIndex: 10, 
+    zIndex: 10,
   },
   checkoutButtonText: {
     color: 'white',
